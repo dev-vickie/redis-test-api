@@ -1,30 +1,34 @@
 const express = require("express");
 const cors = require("cors");
 const axios = require("axios");
-const Redis = require("redis");
-const redisClient = Redis.createClient();
+const Redis = require("ioredis");
+const redisClient = new Redis();
 
 const DEFAULT_EXPIRATION_TIME = 3600;
 
 const app = express();
+
 app.use(express.urlencoded({ extended: true }));
 app.use(cors());
 
-const PORT = 3000;
-
 app.get("/photos", async (req, res) => {
-const albumId = req.query.albumId;
+  console.log(`Redis cache status: ${redisClient.status}`);
 
-  const { data } = await axios.get(
-    "https:jsonplaceholder.typicode.com/photos",
-    { params: { albumId } }
-  );
+  redisClient.get("photos", async (err, photos) => {
+    if (err) console.error(err);
 
-  redisClient.setEx("photos", DEFAULT_EXPIRATION_TIME, JSON.stringify(data));
-
-  res.status(200).send(data);
+    if (photos != null) {
+      console.log("Data fetched from cache");
+      return res.json(JSON.parse(photos));
+    } else {
+      const { data } = await axios.get("https://picsum.photos/v2/list");
+      redisClient.setex("photos", DEFAULT_EXPIRATION_TIME, JSON.stringify(data));
+      console.log("Data fetched from API");
+      res.json(data);
+    }
+  });
 });
 
-app.listen(PORT, () => {
-  console.log(`Server running on ${PORT}`);
+app.listen(3000, () => {
+  console.log(`Server running on PORT 3000`);
 });
